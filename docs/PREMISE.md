@@ -1,4 +1,11 @@
-# botster-orchestrator: premise r4 (2026-09-28)
+# botster-orchestrator: premise r5 (2026-09-28)
+
+r5 answers REJECT 9a75279. Section 3a separates check A (the invocation caller)
+from check B (the plugin's per-operation grant), defines `kind = "plugin"`
+invocations, and defines package ownership without agent lineage. Section 5
+adds screen denial, independent grants, base width, approval, and plugin
+invocation cases.
+
 
 r4 applies the user decision on session authorization (section 3a) and
 rewrites the section 5 authorization tests for it. The denied case moves from
@@ -128,44 +135,63 @@ plugin's admitted grants, like the existing helpers.
   `identity_source = "session"` and the session record.
 - No tool uses a caller claim in its arguments to widen access (forged-caller test).
 
-## 3a. Hub authorization of session operations (r3)
+## 3a. Hub authorization of session operations (r5)
 
 The plugin does not authorize session operations. The Hub does. The plugin
-only chooses the tool surface.
+only chooses the tool surface. Policy source: USER DECISION relayed by 00a2
+(msg_plugin-w_1790639455_6f0632). There is no agent lineage.
 
-Binding. The Hub records the verified caller of each admitted MCP invocation
-in the invocation context (`PluginInvocationContext`). Every session helper
-(P3 update, P4 remove, P6 read_screen, and both spawn helpers) reads the
-caller from the context of the invocation that is running. No helper accepts
-a caller argument. A helper refuses `caller`, `caller_session_id`, or
-`on_behalf_of` with `invalid_request`. So a plugin cannot forge a caller, and
-a tool argument cannot reach the Hub as identity.
+The Hub allows a session operation only when BOTH checks pass:
+check A on the caller, and check B on the plugin's grant. They are independent.
 
-Invocations without a tool caller (event handlers, timers, surface routes) run
-with the caller `{ kind = "plugin" }`. The policy below refuses it for every
-session operation, including spawn.
+Operations: `read` (P2), `screen` (P6), `update` (P3), `remove` (P4), `spawn`
+(both spawn helpers).
 
-Policy (USER DECISION, relayed by 00a2 in msg_plugin-w_1790639455_6f0632; r4).
-It replaces the r3 lineage proposal. The Hub has no `spawned_by` lineage check.
+### Check A: the caller of the invocation
 
-| Caller | any session |
-|---|---|
-| operator | allow |
-| session (verified agent) | allow, as in the monorepo |
-| missing or malformed | refuse `caller_invalid` |
+The Hub records the caller of each admitted invocation in its
+`PluginInvocationContext`. Every session helper reads it from the running
+invocation. No helper accepts a caller argument. A helper refuses `caller`,
+`caller_session_id`, or `on_behalf_of` with `invalid_request`.
 
-A plugin adds its own condition. It may act on a session it did not spawn
-only when its manifest declares the matching `:any` permission and the
-operator approved it at enable. The permissions are granular per operation
-(read, screen, update, remove), so for example a forwarding plugin does not
-get removal. Without the permission, a plugin acts only on sessions it spawned.
-00a2 proposes the permission names in the slice 5d request.
+| Invocation | Caller | Check A |
+|---|---|---|
+| MCP tool call | `{ kind = "operator" }` | pass, for any session |
+| MCP tool call | `{ kind = "session", session_id }`, verified | pass, for any session (as in the monorepo) |
+| MCP tool call | missing or malformed | refuse `caller_invalid` |
+| event, timer, surface route (no tool caller) | `{ kind = "plugin" }` | pass; only check B applies |
 
-Consequence for this plugin: its tools act for agents on any session, so its
-manifest declares the `:any` form of `session_read`, `session_screen`,
-`session_update`, and `session_remove`, with the names 00a2 settles. The
-plugin makes no authorization decision of its own. It passes Hub refusals
-through unchanged.
+### Check B: the plugin's grant
+
+Each operation has its own grant, with two widths:
+- base (for example `session_screen`): the operation is allowed only on a
+  session that this package spawned;
+- `:any` (for example `session_screen:any`): the operation is allowed on any
+  session. The manifest declares it, and the operator approves it at enable.
+  A declared but unapproved `:any` grant counts as absent.
+
+Grants are independent. For example, `session_screen:any` does not give
+`session_remove` or `session_remove:any`. A missing grant is refused with
+`capability_denied`. A base grant on a session that the package did not spawn
+is refused with `forbidden`. Spawn needs the spawn scope that the package
+already declares (`session_type_spawn`, `session_type_managed_git_spawn`).
+
+Package ownership (how the Hub knows "this package spawned it"). At spawn, the
+Hub stores the spawning package key on the session record. It takes the key
+from the invocation that calls the spawn helper, never from arguments or from
+the caller. This is package ownership, not agent lineage: it records which
+plugin package made the session, not which agent asked for it. It is not
+projected to clients. (To confirm with 00a2: the relayed decision drops agent
+`spawned_by`, but "a plugin acts only on sessions it spawned" needs this
+package key.)
+
+### This plugin
+
+Its tools act for agents on any session, so its manifest declares
+`session_read:any`, `session_screen:any`, `session_update:any`, and
+`session_remove:any` (00a2 settles the final names in slice 5d). The plugin
+makes no authorization decision of its own. It passes Hub refusals through
+unchanged.
 
 ## 4. Decisions (orchestrator, 2026-09-28)
 
@@ -186,25 +212,37 @@ through unchanged.
 - Kit specs (`test/*_spec.lua`, run by `botster-plugin-test` at a pinned Hub
   commit) for every tool: success path, each typed refusal, caller identity,
   and forged-caller refusal. Caller specs wait for kit gate G1.
-- Authorization through the real runtime (section 3a, r4). Each case calls the
-  plugin tool with a Hub-verified caller and asserts the Hub result, not a
-  plugin-side check:
-  - agent to agent: session C did not spawn B; C reads B's screen, updates B,
-    and removes B, and each call succeeds (user decision);
-  - operator: an operator caller removes B;
-  - missing caller: an invocation without `request.caller`, and one with a
-    malformed caller, return `caller_invalid` for every tool, including `whoami`;
-  - plugin permission denied: the same package with the `:any` permission
-    removed from its manifest cannot remove, read, or update a session it did
-    not spawn; the Hub refuses, and B still exists afterwards;
-  - operator approval: with `:any` declared but not approved at enable, the
-    Hub refuses in the same way;
-  - forged identity: C passes `caller_session_id = A` (the plugin refuses with
+- Authorization through the real runtime (section 3a, r5). Each case calls the
+  plugin tool and asserts the Hub result, not a plugin-side check. Session B is
+  spawned outside the package under test unless stated.
+  - Check A, agent to agent: session C (verified) reads B's screen, updates B,
+    and removes B; each call succeeds.
+  - Check A, operator: an operator caller removes B.
+  - Check A, missing caller: a tool call without `request.caller`, and one with
+    a malformed caller, return `caller_invalid` for every tool, including
+    `whoami`; B still exists.
+  - Check B, screen denied: the package without `session_screen:any` calls
+    `get_pty_snapshot` on B and receives the Hub refusal; no screen text returns.
+  - Check B, independent grants: a package with `session_screen:any` and
+    without `session_remove:any` reads B's screen and cannot remove B (B still
+    exists). A package with `session_remove:any` and without
+    `session_screen:any` removes B and cannot read its screen. The same pairs
+    cover `update` and `read`.
+  - Check B, base width: a package with only base `session_screen` reads the
+    screen of a session it spawned and is refused for B.
+  - Check B, approval: `session_remove:any` declared but not approved at enable
+    is refused like an absent grant.
+  - Check B, plugin invocation: an event handler of the package (caller kind
+    `plugin`) is governed only by check B: with `session_remove:any` it removes
+    B; without it, it is refused.
+  - Forged identity: C passes `caller_session_id = A` (the plugin refuses with
     `invalid_arguments`); a fixture plugin passes `caller = A` directly to the
     Hub helper (the Hub refuses with `invalid_request`).
-  - Ablation: run the plugin-permission-denied case against a Hub build with
-    the Hub permission check disabled. The case must then fail. This proves
-    that the test observes the Hub decision.
+  - Ablation: run the screen-denied and independent-grant cases against a Hub
+    build with the Hub grant check disabled. They must then fail. This proves
+    that the tests observe the Hub decision.
+  - Grant variants are separate fixture manifests of the same Lua package; no
+    Lua code changes between them.
 - Where each case runs: the kit, when kit gate G1 (caller) is present and the kit can
   spawn a session; otherwise the e2e run on an isolated Hub, with two real
   agent sessions calling tools over HTTP MCP with their own tokens. The
