@@ -209,7 +209,14 @@ unchanged.
    orchestrator never writes workspace state. `workspace_id` is the only
    workspace argument. The reference `workspace_name` argument is cut,
    because the orchestrator does not read workspace records.
-3. Remote hubs: out of scope. The user may still decide otherwise.
+3. Remote hubs (USER DECISION, msg_plugin-w_1790639610_031b60): out for
+   cutover; wanted soon after. Every tool that takes `hub_id` resolves it
+   through one function, `hub.resolve(hub_id)`. It returns the local hub or
+   refuses with `remote_hub_unsupported`. Hub routing later changes only that
+   function and the Hub calls behind it, not each tool.
+5. Audit (USER DECISION, same message): the Hub records a tool-call audit log
+   (caller, tool, target session, outcome) at its MCP dispatcher. The plugin
+   keeps no audit of its own.
 4. Session authorization (user decision, section 3a): agents may act on any
    session; plugins need operator-approved granular `:any` permissions.
 
