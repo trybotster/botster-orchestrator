@@ -1,6 +1,7 @@
 # botster-orchestrator: premise r3 (2026-09-28)
 
-r3 answers the Request 1 verdict (REJECT 0aa2b89). New section 3a defines how
+r3.1 applies the ACCEPT 8caccda notes (Hub-side ablation; no plugin-caller
+spawn exception). r3 answers the Request 1 verdict (REJECT 0aa2b89). New section 3a defines how
 the Hub binds the verified caller to session operations and authorizes them.
 Section 5 adds real-runtime tests for allowed access, denied access between
 two sessions, a missing caller, and a forged identity. r2 changes follow.
@@ -129,7 +130,7 @@ a tool argument cannot reach the Hub as identity.
 
 Invocations without a tool caller (event handlers, timers, surface routes) run
 with the caller `{ kind = "plugin" }`. The policy below refuses it for every
-operation on a session other than one the same invocation just spawned.
+session operation, including spawn.
 
 Lineage (new P9). At spawn, the Hub stores `spawned_by` on the session record:
 the caller session id, or `operator`. It projects `spawned_by` into the
@@ -141,7 +142,7 @@ Policy (proposed default; the Hub owner decides, section 4):
 |---|---|---|---|
 | operator | allow | allow | allow |
 | session | allow | allow | refuse `forbidden` |
-| plugin (no tool caller) | — | refuse, except the same invocation's spawn result | refuse `forbidden` |
+| plugin (no tool caller) | — | refuse `forbidden` | refuse `forbidden` |
 | missing or malformed | refuse `caller_invalid` | refuse `caller_invalid` | refuse `caller_invalid` |
 
 The rule applies to remove, read_screen, and update. Spawn requires a
@@ -186,8 +187,10 @@ spawned. The decision on this change goes to the Hub owner and the user
   - forged identity: C passes `caller_session_id = A` (plugin refuses
     `invalid_arguments`), and a fixture plugin passes `caller = A` directly to
     the Hub helper (Hub refuses `invalid_request`); in both cases B still exists.
-  - Ablation: a fixture that skips the Hub check (plugin-side allow) must make
-    the denied case fail, which proves the test observes the Hub decision.
+  - Ablation: run the denied case against a Hub build with the Hub
+    authorization check disabled. The denied case must then fail. This proves
+    that the test observes the Hub decision. A plugin-side allow cannot bypass
+    the Hub check, so a plugin-side ablation proves nothing.
 - Where each case runs: the kit, when kit gate G1 (caller) is present and the kit can
   spawn a session; otherwise the e2e run on an isolated Hub, with two real
   agent sessions calling tools over HTTP MCP with their own tokens. The
