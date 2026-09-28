@@ -1,4 +1,8 @@
-# botster-orchestrator: premise r5 (2026-09-28)
+# botster-orchestrator: premise r5.1 (2026-09-28)
+
+r5.1 applies the ACCEPT bc2cc2e notes (denial ordering and exact kinds) and
+records the 00a2 confirmation of package ownership.
+
 
 r5 answers REJECT 9a75279. Section 3a separates check A (the invocation caller)
 from check B (the plugin's per-operation grant), defines `kind = "plugin"`
@@ -181,9 +185,11 @@ Hub stores the spawning package key on the session record. It takes the key
 from the invocation that calls the spawn helper, never from arguments or from
 the caller. This is package ownership, not agent lineage: it records which
 plugin package made the session, not which agent asked for it. It is not
-projected to clients. (To confirm with 00a2: the relayed decision drops agent
-`spawned_by`, but "a plugin acts only on sessions it spawned" needs this
-package key.)
+projected to clients. 00a2 confirmed this (msg_plugin-w_1790639577_d4337e):
+the owning package lives in the durable per-session Hub record with label and
+task, is empty for operator and agent spawns, survives disable, enable, and
+reload, and appears only in Lua `sessions.list/show` rows as `owner_plugin`.
+Grant names are final only in the slice 5d request.
 
 ### This plugin
 
@@ -241,6 +247,11 @@ unchanged.
   - Ablation: run the screen-denied and independent-grant cases against a Hub
     build with the Hub grant check disabled. They must then fail. This proves
     that the tests observe the Hub decision.
+  - Ordering: every denial case runs on its own session, or runs before any
+    removal of that session, and asserts the exact Hub error kind
+    (`capability_denied` for a missing grant, `forbidden` for base width on a
+    foreign session, `caller_invalid` for check A). A denial observed after a
+    removal proves nothing.
   - Grant variants are separate fixture manifests of the same Lua package; no
     Lua code changes between them.
 - Where each case runs: the kit, when kit gate G1 (caller) is present and the kit can
