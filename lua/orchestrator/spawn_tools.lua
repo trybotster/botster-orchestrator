@@ -93,7 +93,20 @@ local function choose_session_type(target_id, name, role)
     { candidates = type_ids(#matches == 0 and types or matches) })
 end
 
-local function spawned(identity, session, target, session_type)
+-- Emits the placement event for botster-workspaces. A failed emit does not
+-- undo the spawn; the result reports it so the caller can place the session.
+local function announce_workspace(hub_id, session_id, workspace_id)
+  local ok, emitted = pcall(botster.events.emit, {
+    name = "session_spawned",
+    payload = { hub_id = hub_id, session_id = session_id, workspace_id = workspace_id },
+  })
+  if not ok then
+    return { ok = false, error = { kind = "emit_failed", message = tostring(emitted) } }
+  end
+  return emitted
+end
+
+local function spawned(identity, session, target, session_type, workspace_id)
   local reply = {
     ok = true,
     hub_id = identity.hub_id,
@@ -106,6 +119,10 @@ local function spawned(identity, session, target, session_type)
     created_worktree = session.created_worktree,
     reused_worktree = session.reused_worktree,
   }
+  if workspace_id then
+    reply.workspace_id = workspace_id
+    reply.workspace_event = announce_workspace(identity.hub_id, session.session_id, workspace_id)
+  end
   return reply
 end
 
@@ -172,6 +189,7 @@ M.create_agent = {
       prompt = string_property("Task prompt for the agent."),
       agent_name = string_property(
         "Session type ID or label. Omit to use the target's only agent session type (role botster.agent)."),
+      workspace_id = string_property("Workspace ID to place the new session in."),
     }),
     required = { "issue_or_branch" },
     additionalProperties = false,
@@ -199,17 +217,18 @@ M.create_agent = {
     if err then
       return err
     end
+    local workspace_id = result.text(arguments.workspace_id)
     local session
     session, err = hub.spawn_in_worktree({
       target_id = target.target_id,
       branch = branch_for(result.text(arguments.issue_or_branch)),
       session_type_id = session_type.session_type_id,
-      context = { prompt = result.text(arguments.prompt) },
+      context = { prompt = result.text(arguments.prompt), workspace_id = workspace_id },
     })
     if err then
       return err
     end
-    return spawned(identity, session, target, session_type)
+    return spawned(identity, session, target, session_type, workspace_id)
   end,
 }
 
@@ -223,6 +242,7 @@ M.create_accessory = {
     properties = target_properties({
       accessory_name = string_property("Session type ID or label of the accessory."),
       branch = string_property("Branch whose managed worktree the accessory runs in."),
+      workspace_id = string_property("Workspace ID to place the new session in."),
     }),
     required = { "accessory_name" },
     additionalProperties = false,
@@ -246,8 +266,9 @@ M.create_accessory = {
     if err then
       return err
     end
+    local workspace_id = result.text(arguments.workspace_id)
     local branch = result.text(arguments.branch)
-    local context = {}
+    local context = { workspace_id = workspace_id }
     local session
     if branch then
       if target.kind ~= "git" then
@@ -270,7 +291,7 @@ M.create_accessory = {
     if err then
       return err
     end
-    return spawned(identity, session, target, session_type)
+    return spawned(identity, session, target, session_type, workspace_id)
   end,
 }
 
