@@ -38,5 +38,14 @@ BOTSTER_PLUGIN_TEST=botster-plugin-test script/test
 
 That Hub commit (`botster.hub.identity()` and the kit are on it) is the one these specs were last run against. Raise the pin when a newer Hub commit passes.
 
-The in-process kit starts no session worker, so a completed spawn is proven by
-the end-to-end run on an isolated Hub, not by these specs.
+The in-process kit starts no session worker. `script/test-e2e` runs
+`test/e2e/*_spec.lua` against a real `botster-hub` process with one
+(`botster-plugin-test --e2e`), which proves a completed spawn and, for a spawn
+that asks for a `workspace_id`, that the declared `session_spawned` event is
+accepted by the Hub router. It needs the candidate binaries that the Hub's
+own gate builds:
+
+```sh
+BOTSTER_HUB_BIN=... BOTSTER_SESSION_WORKER_BIN=... BOTSTER_CANDIDATE_MANIFEST=... \
+  BOTSTER_PLUGIN_TEST=botster-plugin-test script/test-e2e
+```
