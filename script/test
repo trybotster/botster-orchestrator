@@ -1,0 +1,7 @@
+#!/bin/sh
+# Runs the botster-orchestrator kit specs against the real Hub plugin runtime.
+# BOTSTER_PLUGIN_TEST names the runner binary (see README, "Testing").
+set -eu
+cd "$(dirname "$0")/.."
+runner="${BOTSTER_PLUGIN_TEST:-botster-plugin-test}"
+exec "$runner" --plugin . test/*_spec.lua

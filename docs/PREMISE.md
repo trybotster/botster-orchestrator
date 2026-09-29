@@ -202,13 +202,15 @@ unchanged.
 ## 4. Decisions (orchestrator, 2026-09-28)
 
 1. `whoami`: the orchestrator plugin owns it.
-2. Workspace placement: `create_agent` passes `context.workspace_id` to the
-   spawn helper. After a successful spawn it emits the declared event
-   `botster-orchestrator.session_spawned` `{ session_id, workspace_id }`.
-   botster-workspaces subscribes and claims membership (section 7). The
-   orchestrator never writes workspace state. `workspace_id` is the only
-   workspace argument. The reference `workspace_name` argument is cut,
-   because the orchestrator does not read workspace records.
+2. Workspace placement: `create_agent` emits the declared event
+   `botster-orchestrator.session_spawned` `{ hub_id, session_id, workspace_id }`,
+   and botster-workspaces subscribes and claims membership. PARKED on branch
+   `delivery/workspace-placement-event` (both repos) until Hub gap P10: the Hub
+   commits a package's subscriptions atomically at activation and refuses a
+   subscription to another package's event whose producer is not active, which
+   fails the whole consumer load. P10 is cutover-required (orchestrator,
+   msg_plugin-w_1790648564_b3b43e). Until then `create_agent` has no
+   `workspace_id`; agents place a session with `move_agent_workspace`.
 3. Remote hubs (USER DECISION, msg_plugin-w_1790639610_031b60): out for
    cutover; wanted soon after. Every tool that takes `hub_id` resolves it
    through one function, `hub.resolve(hub_id)`. It returns the local hub or
@@ -293,13 +295,7 @@ The TUI and the Web call the existing `botster_workspaces.*` tools
 (botster-tui `src/app.rs`, botster-web `scripts/live-packaged-protocol-harness.mjs`).
 These names do not change.
 
-- **W1 subscription.** botster-workspaces subscribes to
-  `{ owner = "botster-orchestrator", name = "session_spawned" }`. The handler
-  claims membership through the existing claim path (the same code as
-  `add_session`). An unknown `workspace_id` or an existing owner is logged and
-  ignored, so the spawn stays successful and the session stays ungrouped.
-  Kit spec: orchestrator emit, then membership in plugin_db and in the
-  membership entity. The chain must settle in one kit step.
+- **W1 subscription.** Parked with decision 2 until P10.
 - **W2 agent tools.** Three agent-facing tools, with the names that agents use
   today: `list_workspaces`, `rename_workspace`, `move_agent_workspace`. Each
   one is a thin entry over the same internal functions as the

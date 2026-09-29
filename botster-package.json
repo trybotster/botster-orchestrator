@@ -1,0 +1,16 @@
+{
+  "name": "botster-orchestrator",
+  "version": "0.1.0",
+  "kind": "plugin",
+  "botster": ">=0.1.0",
+  "description": "Default agent-facing orchestration tools: create, list, label, inspect, and delete Hub sessions.",
+  "source": { "type": "path", "path": "." },
+  "capabilities": [
+    { "surface": "mcp" },
+    { "surface": "session_actions", "scope": "session_type_spawn" },
+    { "surface": "session_actions", "scope": "session_type_managed_git_spawn" }
+  ],
+  "entrypoints": [
+    { "runtime": "lua", "path": "plugin.lua", "bootstrap": false }
+  ]
+}
