@@ -10,6 +10,24 @@
     { "surface": "session_actions", "scope": "session_type_spawn" },
     { "surface": "session_actions", "scope": "session_type_managed_git_spawn" }
   ],
+  "events": {
+    "emitted": [
+      {
+        "name": "session_spawned",
+        "audience": ["plugins"],
+        "payload_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hub_id": { "type": "string", "minLength": 1 },
+            "session_id": { "type": "string", "minLength": 1 },
+            "workspace_id": { "type": "string", "minLength": 1 }
+          },
+          "required": ["hub_id", "session_id", "workspace_id"]
+        }
+      }
+    ]
+  },
   "entrypoints": [
     { "runtime": "lua", "path": "plugin.lua", "bootstrap": false }
   ]
