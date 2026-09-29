@@ -22,9 +22,18 @@ function M.identity()
   return identified.value, nil
 end
 
--- The one place a tool's `hub_id` argument is resolved. Nil means the local
--- hub. Hub routing replaces the refusal below; tools do not change.
-function M.resolve(hub_id)
+-- The one place a tool's `hub_id` argument is resolved. It takes the raw
+-- argument: nil means the local hub; anything else must be a non-blank string,
+-- so a malformed hub_id never falls back to the local hub. Hub routing
+-- replaces the refusal below; tools do not change.
+function M.resolve(raw_hub_id)
+  local hub_id = nil
+  if raw_hub_id ~= nil then
+    hub_id = result.text(raw_hub_id)
+    if hub_id == nil then
+      return nil, result.refuse("invalid_arguments", "hub_id must be a non-blank string")
+    end
+  end
   local identity, err = M.identity()
   if err then
     return nil, err

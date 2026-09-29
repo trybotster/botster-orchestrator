@@ -41,6 +41,33 @@ local function json_array(t, value, what)
   t:eq(#value, 0)
 end
 
+-- A git target: a fresh repository with one commit.
+local function git_root()
+  local root = io.popen("mktemp -d"):read("*l")
+  assert(os.execute("git -C '" .. root .. "' init --quiet && git -C '" .. root
+    .. "' -c user.name=kit -c user.email=kit@localhost commit --quiet --allow-empty -m init"))
+  return root
+end
+
+-- Admits a device session type for a target through the Hub's own request.
+local function admit_session_type(t, target_id, id, role)
+  local response = t:request({
+    type = "create_session_type",
+    source = { source = "device" },
+    definition = {
+      id = id,
+      label = id,
+      role = role,
+      interaction = "interactive",
+      lifecycle = "task",
+      execution = { mode = "shell_command" },
+      command = "cat",
+      target_id = target_id,
+    },
+  })
+  t:eq(response.ok, true)
+end
+
 local function local_hub_id(p)
   return p:call_tool("list_spawn_targets", {}).result.hub_id
 end
@@ -118,4 +145,39 @@ kit.test("hub_id defaults to the local hub and a remote hub is refused", functio
     "remote_hub_unsupported")
   t:eq(p:call_tool("create_accessory", { hub_id = remote, accessory_name = "x", target_id = "t" }).result.error.kind,
     "remote_hub_unsupported")
+end)
+
+-- Review of dc521f8: Hub roles are namespaced ("botster.agent"). Without
+-- agent_name, create_agent must pick the target's only agent type and reach
+-- the Hub spawn helper, not refuse with session_type_not_found.
+kit.test("create_agent picks the target's only botster.agent session type", function(t)
+  local p = t:load(".")
+  local response = t:request({
+    type = "create_spawn_target", target_id = "repo", label = "Repo",
+    root = git_root(), enabled = true, kind = "git",
+  })
+  t:eq(response.ok, true)
+  admit_session_type(t, "repo", "agent", "botster.agent")
+  admit_session_type(t, "repo", "shell", "botster.accessory")
+  local listed = p:call_tool("list_spawn_targets", {}).result
+  t:match(listed.targets, { { target_id = "repo", session_types = {
+    { role = "botster.agent" }, { role = "botster.accessory" },
+  } } })
+  local r = p:call_tool("create_agent", { issue_or_branch = "7", target_id = "repo" }).result
+  if r.ok ~= true then
+    t:ok(r.error.kind ~= "session_type_not_found" and r.error.kind ~= "session_type_ambiguous",
+      "the agent type was chosen; the refusal came later: " .. tostring(r.error.kind))
+  end
+end)
+
+-- A malformed hub_id never falls back to the local hub.
+kit.test("a malformed hub_id is refused", function(t)
+  local p = t:load(".")
+  for _, bad in ipairs({ false, 42, "   " }) do
+    t:eq(p:call_tool("list_spawn_targets", { hub_id = bad }).result.error.kind, "invalid_arguments")
+    t:eq(p:call_tool("create_agent", { hub_id = bad, issue_or_branch = "b", target_id = "t" }).result.error.kind,
+      "invalid_arguments")
+    t:eq(p:call_tool("create_accessory", { hub_id = bad, accessory_name = "x", target_id = "t" }).result.error.kind,
+      "invalid_arguments")
+  end
 end)

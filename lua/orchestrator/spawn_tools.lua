@@ -4,6 +4,9 @@ local hub = require("orchestrator.hub")
 
 local M = {}
 
+-- Hub session-type roles are namespaced.
+local AGENT_ROLE = "botster.agent"
+
 local function string_property(description)
   return { type = "string", description = description }
 end
@@ -117,7 +120,7 @@ M.list_spawn_targets = {
     if refused then
       return refused
     end
-    local identity, err = hub.resolve(result.text(arguments.hub_id))
+    local identity, err = hub.resolve(arguments.hub_id)
     if err then
       return err
     end
@@ -168,7 +171,7 @@ M.create_agent = {
       issue_or_branch = string_property("Issue number or branch name for the agent's worktree."),
       prompt = string_property("Task prompt for the agent."),
       agent_name = string_property(
-        "Session type ID or label. Omit to use the target's only session type with role 'agent'."),
+        "Session type ID or label. Omit to use the target's only agent session type (role botster.agent)."),
     }),
     required = { "issue_or_branch" },
     additionalProperties = false,
@@ -178,7 +181,7 @@ M.create_agent = {
     if refused then
       return refused
     end
-    local identity, err = hub.resolve(result.text(arguments.hub_id))
+    local identity, err = hub.resolve(arguments.hub_id)
     if err then
       return err
     end
@@ -192,7 +195,7 @@ M.create_agent = {
         "create_agent needs a git spawn target for its worktree: " .. target.target_id)
     end
     local session_type
-    session_type, err = choose_session_type(target.target_id, result.text(arguments.agent_name), "agent")
+    session_type, err = choose_session_type(target.target_id, result.text(arguments.agent_name), AGENT_ROLE)
     if err then
       return err
     end
@@ -229,7 +232,7 @@ M.create_accessory = {
     if refused then
       return refused
     end
-    local identity, err = hub.resolve(result.text(arguments.hub_id))
+    local identity, err = hub.resolve(arguments.hub_id)
     if err then
       return err
     end
