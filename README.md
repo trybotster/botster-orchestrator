@@ -32,11 +32,11 @@ The specs in `test/*_spec.lua` run in the Botster plugin test kit, which loads
 this package into a real Hub runtime (no API fakes):
 
 ```sh
-cargo install --locked --git https://github.com/trybotster/botster-hub --rev 035fc2cd193f698c1a2eeb7025fcc3e2afbcaec7 botster-plugin-test-kit
+cargo install --locked --git https://github.com/trybotster/botster-hub --rev 54af42daa86bbbd4c9874468e2c0dd0e0f7bbb25 botster-plugin-test-kit
 BOTSTER_PLUGIN_TEST=botster-plugin-test script/test
 ```
 
-That Hub commit (`botster.hub.identity()` and the kit are on it) is the one these specs were last run against. Raise the pin when a newer Hub commit passes.
+That Hub commit (`botster.hub.identity()`, the kit, and `p:undefined_globals()` are on it) is the one these specs were last run against. Raise the pin when a newer Hub commit passes.
 
 The in-process kit starts no session worker. `script/test-e2e` runs
 `test/e2e/*_spec.lua` against a real `botster-hub` process with one
